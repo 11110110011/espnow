@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "espnow_master.c"
     INCLUDE_DIRS "include"
-    REQUIRES node_table mqtt_bridge esp_now esp_wifi esp_timer
+    REQUIRES node_table mqtt_bridge esp_wifi esp_timer
 )

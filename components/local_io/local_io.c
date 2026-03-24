@@ -32,7 +32,7 @@ static void input_poll_task(void *arg)
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
         for (int i = 0; i < CONFIG_STORE_GPIO_COUNT; i++) {
-            if (s_cfg[i].mode != GPIO_MODE_INPUT) continue;
+            if (s_cfg[i].mode != CFG_GPIO_MODE_INPUT) continue;
             int raw   = gpio_get_level(s_gpio_map[i]);
             bool level = s_cfg[i].invert ? !raw : !!raw;
             if (level != s_last_input[i]) {
@@ -51,7 +51,7 @@ static void input_poll_task(void *arg)
 static void configure_pin(int idx)
 {
     int gpio_num = s_gpio_map[idx];
-    if (s_cfg[idx].mode == GPIO_MODE_DISABLED) {
+    if (s_cfg[idx].mode == CFG_GPIO_MODE_DISABLED) {
         gpio_reset_pin(gpio_num);
         return;
     }
@@ -63,11 +63,11 @@ static void configure_pin(int idx)
         .pull_up_en   = s_cfg[idx].pull_up ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
     };
 
-    if (s_cfg[idx].mode == GPIO_MODE_INPUT) {
-        io_conf.mode = GPIO_MODE_INPUT;
+    if (s_cfg[idx].mode == CFG_GPIO_MODE_INPUT) {
+        io_conf.mode = CFG_GPIO_MODE_INPUT;
         s_last_input[idx] = false;
     } else {
-        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.mode = CFG_GPIO_MODE_OUTPUT;
     }
     gpio_config(&io_conf);
 }
@@ -90,7 +90,7 @@ esp_err_t local_io_init(void)
 esp_err_t local_io_set_output(int pin, bool state)
 {
     if (pin < 0 || pin >= CONFIG_STORE_GPIO_COUNT) return ESP_ERR_INVALID_ARG;
-    if (s_cfg[pin].mode != GPIO_MODE_OUTPUT)       return ESP_ERR_INVALID_STATE;
+    if (s_cfg[pin].mode != CFG_GPIO_MODE_OUTPUT)       return ESP_ERR_INVALID_STATE;
     bool level = s_cfg[pin].invert ? !state : state;
     gpio_set_level(s_gpio_map[pin], level ? 1 : 0);
     mqtt_bridge_publish_gpio_state(pin, state);
@@ -100,7 +100,7 @@ esp_err_t local_io_set_output(int pin, bool state)
 esp_err_t local_io_trigger_pulse(int pin)
 {
     if (pin < 0 || pin >= CONFIG_STORE_GPIO_COUNT) return ESP_ERR_INVALID_ARG;
-    if (s_cfg[pin].mode != GPIO_MODE_OUTPUT)       return ESP_ERR_INVALID_STATE;
+    if (s_cfg[pin].mode != CFG_GPIO_MODE_OUTPUT)       return ESP_ERR_INVALID_STATE;
     if (!s_cfg[pin].pulse_mode)                    return ESP_ERR_INVALID_STATE;
 
     int count = s_cfg[pin].pulse_count;
@@ -119,7 +119,7 @@ esp_err_t local_io_trigger_pulse(int pin)
 bool local_io_get_input(int pin)
 {
     if (pin < 0 || pin >= CONFIG_STORE_GPIO_COUNT) return false;
-    if (s_cfg[pin].mode != GPIO_MODE_INPUT)        return false;
+    if (s_cfg[pin].mode != CFG_GPIO_MODE_INPUT)        return false;
     return s_last_input[pin];
 }
 

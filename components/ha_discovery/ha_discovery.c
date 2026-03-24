@@ -66,12 +66,12 @@ esp_err_t ha_discovery_publish_gpio(int pin)
 
     gpio_cfg_t cfg;
     config_store_get_gpio(pin, &cfg);
-    if (cfg.mode == GPIO_MODE_DISABLED) return ESP_OK;
+    if (cfg.mode == CFG_GPIO_MODE_DISABLED) return ESP_OK;
 
     char topic[128];
     char payload[512];
 
-    if (cfg.mode == GPIO_MODE_OUTPUT) {
+    if (cfg.mode == CFG_GPIO_MODE_OUTPUT) {
         snprintf(topic, sizeof(topic),
                  "homeassistant/switch/espnow_gpio_%d/config", pin);
         snprintf(payload, sizeof(payload),

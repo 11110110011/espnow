@@ -1,6 +1,7 @@
 #include "mqtt_bridge.h"
 #include "config_store.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include "mqtt_client.h"
 #include <string.h>
 #include <stdio.h>

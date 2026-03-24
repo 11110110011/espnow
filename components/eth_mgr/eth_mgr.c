@@ -1,6 +1,7 @@
 #include "eth_mgr.h"
 #include "config_store.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include "esp_eth.h"
 #include "esp_netif.h"
 #include "esp_event.h"
@@ -8,6 +9,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "lwip/inet.h"
 #include <string.h>
 
 static const char *TAG = "eth_mgr";
@@ -114,7 +116,7 @@ esp_err_t eth_mgr_init(void)
     ESP_RETURN_ON_ERROR(esp_eth_driver_install(&eth_cfg, &eth_handle), TAG, "eth driver");
 
     /* Attach netif to ethernet driver */
-    esp_netif_glue_handle_t glue = esp_eth_new_netif_glue(eth_handle);
+    esp_eth_netif_glue_handle_t glue = esp_eth_new_netif_glue(eth_handle);
     esp_netif_attach(s_netif, glue);
 
     /* Apply network config */
@@ -122,9 +124,9 @@ esp_err_t eth_mgr_init(void)
     config_store_get_net(&net);
     if (!net.dhcp) {
         esp_netif_ip_info_t ip_info;
-        ip4addr_aton(net.ip,   (ip4_addr_t *)&ip_info.ip);
-        ip4addr_aton(net.mask, (ip4_addr_t *)&ip_info.netmask);
-        ip4addr_aton(net.gw,   (ip4_addr_t *)&ip_info.gw);
+        ip_info.ip.addr      = inet_addr(net.ip);
+        ip_info.netmask.addr = inet_addr(net.mask);
+        ip_info.gw.addr      = inet_addr(net.gw);
         esp_netif_dhcpc_stop(s_netif);
         esp_netif_set_ip_info(s_netif, &ip_info);
         ESP_LOGI(TAG, "Static IP: %s", net.ip);

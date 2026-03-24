@@ -2,6 +2,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include <string.h>
 
 static const char *TAG = "config_store";
@@ -134,7 +135,7 @@ esp_err_t config_store_get_gpio(int pin, gpio_cfg_t *out)
     esp_err_t ret = open_nvs(ns, NVS_READONLY, &h);
     if (ret == ESP_ERR_NVS_NOT_FOUND) {
         memset(out, 0, sizeof(*out));
-        out->mode        = GPIO_MODE_DISABLED;
+        out->mode        = CFG_GPIO_MODE_DISABLED;
         out->pulse_count = 1;
         return ESP_OK;
     }

@@ -1,6 +1,7 @@
 #include "node_table.h"
 #include "config_store.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include "esp_timer.h"
 #include <string.h>
 

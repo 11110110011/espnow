@@ -4,6 +4,7 @@
 #include "local_io.h"
 #include "sys_status.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include "esp_http_server.h"
 #include "esp_system.h"
 #include <string.h>
@@ -128,7 +129,7 @@ static esp_err_t handle_gpio(httpd_req_t *req)
             "<tr><td>%d</td><td>%s</td><td>%s</td></tr>",
             i,
             mode_str[cfg.mode < 3 ? cfg.mode : 0],
-            cfg.mode == GPIO_MODE_INPUT
+            cfg.mode == CFG_GPIO_MODE_INPUT
                 ? (local_io_get_input(i) ? "ON" : "OFF")
                 : "-");
         strlcat(html, row, sizeof(html));

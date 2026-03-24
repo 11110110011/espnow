@@ -28,12 +28,12 @@ typedef struct {
     char     topic[32];
 } mqtt_config_t;
 
-#define GPIO_MODE_DISABLED  0
-#define GPIO_MODE_INPUT     1
-#define GPIO_MODE_OUTPUT    2
+#define CFG_GPIO_MODE_DISABLED  0
+#define CFG_GPIO_MODE_INPUT     1
+#define CFG_GPIO_MODE_OUTPUT    2
 
 typedef struct {
-    uint8_t mode;           /* GPIO_MODE_* */
+    uint8_t mode;           /* CFG_GPIO_MODE_* */
     bool    pull_up;
     bool    invert;
     bool    pulse_mode;

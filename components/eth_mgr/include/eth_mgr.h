@@ -23,9 +23,6 @@ extern "C" {
 #ifndef ETH_W5500_CS_GPIO
 #define ETH_W5500_CS_GPIO     5
 #endif
-#ifndef ETH_W5500_INT_GPIO
-#define ETH_W5500_INT_GPIO    4
-#endif
 #ifndef ETH_W5500_RST_GPIO
 #define ETH_W5500_RST_GPIO    14
 #endif

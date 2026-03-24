@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "lwip/inet.h"
+#include "esp_mac.h"
 #include <string.h>
 
 static const char *TAG = "eth_mgr";
@@ -80,9 +81,6 @@ esp_err_t eth_mgr_init(void)
     s_netif = esp_netif_new(&netif_cfg);
     esp_netif_set_hostname(s_netif, "espnow");
 
-    /* Required for W5500 interrupt GPIO handler */
-    gpio_install_isr_service(0);
-
     /* SPI bus init */
     spi_bus_config_t buscfg = {
         .miso_io_num   = ETH_W5500_MISO_GPIO,
@@ -106,7 +104,8 @@ esp_err_t eth_mgr_init(void)
     };
 
     eth_w5500_config_t w5500_cfg = ETH_W5500_DEFAULT_CONFIG(ETH_W5500_SPI_HOST, &devcfg);
-    w5500_cfg.int_gpio_num = ETH_W5500_INT_GPIO;
+    w5500_cfg.int_gpio_num = -1;        /* INT not wired — use polling mode */
+    w5500_cfg.poll_period_ms = 10;      /* poll every 10 ms */
 
     eth_mac_config_t mac_cfg = ETH_MAC_DEFAULT_CONFIG();
     eth_phy_config_t phy_cfg = ETH_PHY_DEFAULT_CONFIG();
@@ -118,6 +117,12 @@ esp_err_t eth_mgr_init(void)
     esp_eth_config_t eth_cfg = ETH_DEFAULT_CONFIG(mac, phy);
     esp_eth_handle_t eth_handle = NULL;
     ESP_RETURN_ON_ERROR(esp_eth_driver_install(&eth_cfg, &eth_handle), TAG, "eth driver");
+
+    /* W5500 has no factory MAC — assign from ESP32 eFuse */
+    uint8_t mac_addr[6];
+    ESP_RETURN_ON_ERROR(esp_read_mac(mac_addr, ESP_MAC_ETH), TAG, "read mac");
+    ESP_RETURN_ON_ERROR(esp_eth_ioctl(eth_handle, ETH_CMD_S_MAC_ADDR, mac_addr), TAG, "set mac");
+    ESP_LOGI(TAG, "MAC: " MACSTR, MAC2STR(mac_addr));
 
     /* Attach netif to ethernet driver */
     esp_eth_netif_glue_handle_t glue = esp_eth_new_netif_glue(eth_handle);

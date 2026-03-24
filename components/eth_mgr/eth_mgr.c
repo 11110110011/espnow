@@ -80,6 +80,9 @@ esp_err_t eth_mgr_init(void)
     s_netif = esp_netif_new(&netif_cfg);
     esp_netif_set_hostname(s_netif, "espnow");
 
+    /* Required for W5500 interrupt GPIO handler */
+    gpio_install_isr_service(0);
+
     /* SPI bus init */
     spi_bus_config_t buscfg = {
         .miso_io_num   = ETH_W5500_MISO_GPIO,

@@ -9,17 +9,20 @@
 static const char *TAG = "mqtt_bridge";
 
 #define MAX_SUBSCRIPTIONS  32
+#define MAX_CONNECT_CBS     8
 
 typedef struct {
     char            topic[128];
     mqtt_callback_t cb;
 } subscription_t;
 
-static esp_mqtt_client_handle_t s_client      = NULL;
-static bool                     s_connected   = false;
+static esp_mqtt_client_handle_t s_client         = NULL;
+static bool                     s_connected      = false;
 static mqtt_config_t            s_cfg;
 static subscription_t           s_subs[MAX_SUBSCRIPTIONS];
-static int                      s_sub_count   = 0;
+static int                      s_sub_count      = 0;
+static mqtt_connect_cb_t        s_connect_cbs[MAX_CONNECT_CBS];
+static int                      s_connect_cb_cnt = 0;
 
 /* -----------------------------------------------------------------------
  * Event handler
@@ -37,6 +40,10 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         /* Re-subscribe to all topics */
         for (int i = 0; i < s_sub_count; i++) {
             esp_mqtt_client_subscribe(s_client, s_subs[i].topic, 1);
+        }
+        /* Fire connect callbacks (e.g. HA discovery re-publish) */
+        for (int i = 0; i < s_connect_cb_cnt; i++) {
+            s_connect_cbs[i]();
         }
         break;
 
@@ -76,11 +83,12 @@ esp_err_t mqtt_bridge_init(void)
 {
     config_store_get_mqtt(&s_cfg);
 
-    char uri[128];
-    snprintf(uri, sizeof(uri), "mqtt://%s:%u", s_cfg.host, s_cfg.port);
+    ESP_LOGI(TAG, "Connecting to MQTT broker %s:%u", s_cfg.host, s_cfg.port);
 
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri         = uri,
+        .broker.address.hostname  = s_cfg.host,
+        .broker.address.port      = s_cfg.port,
+        .broker.address.transport = MQTT_TRANSPORT_OVER_TCP,
         .credentials.username       = s_cfg.user[0] ? s_cfg.user : NULL,
         .credentials.authentication.password = s_cfg.pass[0] ? s_cfg.pass : NULL,
         .session.keepalive          = 60,
@@ -141,4 +149,11 @@ esp_err_t mqtt_bridge_publish_gpio_state(int pin, bool state)
 bool mqtt_bridge_is_connected(void)
 {
     return s_connected;
+}
+
+esp_err_t mqtt_bridge_register_connect_cb(mqtt_connect_cb_t cb)
+{
+    if (s_connect_cb_cnt >= MAX_CONNECT_CBS) return ESP_ERR_NO_MEM;
+    s_connect_cbs[s_connect_cb_cnt++] = cb;
+    return ESP_OK;
 }

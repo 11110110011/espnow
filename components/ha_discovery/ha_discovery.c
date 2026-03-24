@@ -124,3 +124,17 @@ esp_err_t ha_discovery_publish_all(void)
     ESP_LOGI(TAG, "HA discovery published");
     return ESP_OK;
 }
+
+/* -----------------------------------------------------------------------
+ * Init — register with mqtt_bridge so discovery fires on every connect
+ * --------------------------------------------------------------------- */
+
+static void on_mqtt_connect(void)
+{
+    ha_discovery_publish_all();
+}
+
+esp_err_t ha_discovery_init(void)
+{
+    return mqtt_bridge_register_connect_cb(on_mqtt_connect);
+}

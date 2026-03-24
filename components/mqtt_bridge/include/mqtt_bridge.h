@@ -40,6 +40,14 @@ esp_err_t mqtt_bridge_publish_gpio_state(int pin, bool state);
 /** @brief Return true when MQTT is connected to the broker. */
 bool mqtt_bridge_is_connected(void);
 
+/**
+ * @brief Register a callback invoked on every successful MQTT connect
+ *        (including reconnects).  Use this to re-publish discovery or
+ *        initial state after the broker comes back.
+ */
+typedef void (*mqtt_connect_cb_t)(void);
+esp_err_t mqtt_bridge_register_connect_cb(mqtt_connect_cb_t cb);
+
 #ifdef __cplusplus
 }
 #endif

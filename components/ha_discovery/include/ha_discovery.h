@@ -8,6 +8,13 @@ extern "C" {
 #endif
 
 /**
+ * @brief Register an MQTT connect callback so discovery is (re-)published
+ *        on every broker connect, including reconnects.
+ *        Call once after mqtt_bridge_init().
+ */
+esp_err_t ha_discovery_init(void);
+
+/**
  * @brief Publish Home Assistant MQTT discovery messages for all known nodes
  *        and enabled local GPIOs.  Safe to call multiple times (idempotent).
  */

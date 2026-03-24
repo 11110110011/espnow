@@ -41,21 +41,25 @@ esp_err_t config_store_get_net(net_config_t *out)
     if (ret == ESP_ERR_NVS_NOT_FOUND) {
         /* Return defaults */
         memset(out, 0, sizeof(*out));
-        out->dhcp = true;
+        out->dhcp = false;
+        strcpy(out->ip,   "10.0.0.50");
+        strcpy(out->mask, "255.255.255.0");
+        strcpy(out->gw,   "10.0.0.138");
+        strcpy(out->dns,  "8.8.8.8");
         return ESP_OK;
     }
     if (ret != ESP_OK) return ret;
 
-    uint8_t dhcp = 1;
+    uint8_t dhcp = 0;
     nvs_get_u8(h, "dhcp", &dhcp);
     out->dhcp = (bool)dhcp;
 
     size_t len = sizeof(out->ip);
-    if (nvs_get_str(h, "ip",   out->ip,   &len) != ESP_OK) strcpy(out->ip,   "192.168.1.100");
+    if (nvs_get_str(h, "ip",   out->ip,   &len) != ESP_OK) strcpy(out->ip,   "10.0.0.50");
     len = sizeof(out->mask);
     if (nvs_get_str(h, "mask", out->mask, &len) != ESP_OK) strcpy(out->mask, "255.255.255.0");
     len = sizeof(out->gw);
-    if (nvs_get_str(h, "gw",   out->gw,   &len) != ESP_OK) strcpy(out->gw,   "192.168.1.1");
+    if (nvs_get_str(h, "gw",   out->gw,   &len) != ESP_OK) strcpy(out->gw,   "10.0.0.138");
     len = sizeof(out->dns);
     if (nvs_get_str(h, "dns",  out->dns,  &len) != ESP_OK) strcpy(out->dns,  "8.8.8.8");
 
@@ -85,8 +89,10 @@ esp_err_t config_store_get_mqtt(mqtt_config_t *out)
     esp_err_t ret = open_nvs("mqtt", NVS_READONLY, &h);
     if (ret == ESP_ERR_NVS_NOT_FOUND) {
         memset(out, 0, sizeof(*out));
-        strcpy(out->host,  "192.168.1.1");
+        strcpy(out->host,  "10.0.0.19");
         out->port = 1883;
+        strcpy(out->user,  "test");
+        strcpy(out->pass,  "test");
         strcpy(out->topic, "espnow");
         return ESP_OK;
     }

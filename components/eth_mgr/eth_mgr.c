@@ -78,6 +78,7 @@ esp_err_t eth_mgr_init(void)
     /* Create netif for W5500 */
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
     s_netif = esp_netif_new(&netif_cfg);
+    esp_netif_set_hostname(s_netif, "espnow");
 
     /* SPI bus init */
     spi_bus_config_t buscfg = {
@@ -129,9 +130,8 @@ esp_err_t eth_mgr_init(void)
         ip_info.gw.addr      = inet_addr(net.gw);
         esp_netif_dhcpc_stop(s_netif);
         esp_netif_set_ip_info(s_netif, &ip_info);
-        ESP_LOGI(TAG, "Static IP: %s", net.ip);
-        s_connected = true;
-        xEventGroupSetBits(s_eth_event_group, ETH_CONNECTED_BIT);
+        ESP_LOGI(TAG, "Static IP configured: %s (waiting for link)", net.ip);
+        /* Do NOT set ETH_CONNECTED_BIT here — wait for physical link + IP event */
     }
 
     ESP_RETURN_ON_ERROR(esp_eth_start(eth_handle), TAG, "eth start");

@@ -34,8 +34,8 @@ void app_main(void)
     /* 6. ESP-NOW master */
     ESP_ERROR_CHECK(espnow_master_init());
 
-    /* 7. Home Assistant discovery */
-    ESP_ERROR_CHECK(ha_discovery_publish_all());
+    /* 7. Home Assistant discovery — re-published on every MQTT connect */
+    ESP_ERROR_CHECK(ha_discovery_init());
 
     /* 8. Web configuration UI */
     ESP_ERROR_CHECK(web_cfg_start());

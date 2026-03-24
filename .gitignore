@@ -1,0 +1,16 @@
+# ESP-IDF build output
+build/
+sdkconfig
+sdkconfig.old
+
+# Claude Code local settings
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# smart-home-espnow  —  sdkconfig.defaults  (ESP-IDF v5.5)
+# ---------------------------------------------------------------------------
+
+# Flash / partitions
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# NVS
+CONFIG_NVS_ENCRYPTION=n
+
+# ---------------------------------------------------------------------------
+# Ethernet — W5500 over SPI
+# ---------------------------------------------------------------------------
+CONFIG_ETH_ENABLED=y
+CONFIG_ETH_USE_SPI_ETHERNET=y
+CONFIG_ETH_SPI_ETHERNET_W5500=y
+
+# ---------------------------------------------------------------------------
+# Wi-Fi — must be enabled for ESP-NOW (even without AP/STA connection)
+# ---------------------------------------------------------------------------
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_TX_BUFFER_TYPE_DYNAMIC=y
+
+# ---------------------------------------------------------------------------
+# ESP-NOW
+# ---------------------------------------------------------------------------
+CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=7
+
+# ---------------------------------------------------------------------------
+# MQTT
+# ---------------------------------------------------------------------------
+CONFIG_MQTT_PROTOCOL_311=y
+CONFIG_MQTT_TRANSPORT_TCP=y
+CONFIG_MQTT_BUFFER_SIZE=1024
+CONFIG_MQTT_TASK_STACK_SIZE=6144
+
+# ---------------------------------------------------------------------------
+# HTTP server (web_cfg)
+# ---------------------------------------------------------------------------
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+CONFIG_HTTPD_ERR_RESP_NO_DELAY=y
+
+# ---------------------------------------------------------------------------
+# FreeRTOS
+# ---------------------------------------------------------------------------
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_USE_TRACE_FACILITY=n
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+# ---------------------------------------------------------------------------
+# Compiler
+# ---------------------------------------------------------------------------
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y

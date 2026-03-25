@@ -131,6 +131,7 @@ esp_err_t espnow_master_init(void)
     ESP_RETURN_ON_ERROR(esp_wifi_init(&wifi_cfg), TAG, "wifi init");
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "wifi mode");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE), TAG, "wifi channel");
 
     ESP_RETURN_ON_ERROR(esp_now_init(), TAG, "esp_now init");
     ESP_RETURN_ON_ERROR(esp_now_set_pmk((uint8_t *)"pmk1234567890123"), TAG, "pmk");

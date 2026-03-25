@@ -17,7 +17,7 @@ static const char *TAG = "local_io";
 /* Map logical pin indices 0–7 to actual GPIO numbers.
    Adjust these for the target hardware. */
 static const int s_gpio_map[CONFIG_STORE_GPIO_COUNT] = {
-    32, 33, 34, 35, 25, 26, 27, 14
+    32, 33, 34, 35, 25, 26, 27, 14, 36
 };
 
 static gpio_cfg_t  s_cfg[CONFIG_STORE_GPIO_COUNT];
@@ -56,11 +56,13 @@ static void configure_pin(int idx)
         return;
     }
 
+    /* GPIO34, 35, 36, 39 are input-only and do not support pull resistors */
+    bool pull_capable = !(gpio_num >= 34 && gpio_num <= 39);
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << gpio_num),
         .intr_type    = GPIO_INTR_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en   = s_cfg[idx].pull_up ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
+        .pull_up_en   = (s_cfg[idx].pull_up && pull_capable) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
     };
 
     if (s_cfg[idx].mode == CFG_GPIO_MODE_INPUT) {

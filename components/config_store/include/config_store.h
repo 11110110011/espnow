@@ -46,7 +46,7 @@ typedef struct {
 } node_entry_t;
 
 #define CONFIG_STORE_MAX_NODES  12
-#define CONFIG_STORE_GPIO_COUNT  8
+#define CONFIG_STORE_GPIO_COUNT  9
 
 /* -----------------------------------------------------------------------
  * API

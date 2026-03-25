@@ -21,6 +21,7 @@ static const char *TAG = "espnow_master";
 static QueueHandle_t    s_recv_queue;
 static esp_timer_handle_t s_keepalive_timer;
 static uint8_t          s_seq = 0;
+static uint8_t          s_missed_pings[CONFIG_STORE_MAX_NODES + 1]; /* indexed by node_id */
 
 typedef struct {
     uint8_t      mac[6];
@@ -124,6 +125,7 @@ static void espnow_recv_task(void *arg)
             /* Publish availability */
             mqtt_bridge_publish_node_avail(node_id, true);
             subscribe_node_cmd(node_id);
+            if (node_id <= CONFIG_STORE_MAX_NODES) s_missed_pings[node_id] = 0;
             break;
         }
 
@@ -132,12 +134,16 @@ static void espnow_recv_task(void *arg)
             ESP_LOGI(TAG, "STATE from node %d: %s", msg->node_id, relay_state ? "ON" : "OFF");
             node_table_update_state(msg->node_id, (bool)relay_state);
             mqtt_bridge_publish_node_state(msg->node_id, (bool)relay_state);
+            if (msg->node_id <= CONFIG_STORE_MAX_NODES)
+                s_missed_pings[msg->node_id] = 0;
             break;
         }
 
         case ESPNOW_MSG_PONG: {
             ESP_LOGD(TAG, "PONG from node %d", msg->node_id);
             node_table_set_online(msg->node_id, true);
+            if (msg->node_id <= CONFIG_STORE_MAX_NODES)
+                s_missed_pings[msg->node_id] = 0;
             break;
         }
 
@@ -154,7 +160,24 @@ static void espnow_recv_task(void *arg)
 
 static void keepalive_cb(void *arg)
 {
-    espnow_master_ping_all();
+    int count = node_table_count();
+    for (uint8_t id = 1; id <= (uint8_t)count; id++) {
+        node_record_t *rec = node_table_find_by_id(id);
+        if (!rec || !rec->online) continue;
+
+        /* Check if previous PING went unanswered */
+        if (id <= CONFIG_STORE_MAX_NODES && s_missed_pings[id] >= MAX_MISSED_PONGS) {
+            ESP_LOGW(TAG, "Node %d offline — %d missed PINGs", id, s_missed_pings[id]);
+            node_table_set_online(id, false);
+            mqtt_bridge_publish_node_avail(id, false);
+            s_missed_pings[id] = 0;
+            continue;
+        }
+
+        espnow_msg_t ping = { .msg_type = ESPNOW_MSG_PING, .node_id = id };
+        send_msg(rec->mac, &ping);
+        if (id <= CONFIG_STORE_MAX_NODES) s_missed_pings[id]++;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -191,11 +214,18 @@ esp_err_t espnow_master_init(void)
     ESP_RETURN_ON_ERROR(
         esp_timer_start_periodic(s_keepalive_timer, KEEPALIVE_INTERVAL_US), TAG, "timer start");
 
-    /* Subscribe to command topics for nodes already in NVS */
+    /* For nodes already in NVS: add as ESP-NOW peers and subscribe to commands */
     int count = node_table_count();
     for (uint8_t id = 1; id <= (uint8_t)count; id++) {
         node_record_t *rec = node_table_find_by_id(id);
-        if (rec) subscribe_node_cmd(rec->node_id);
+        if (!rec) continue;
+        if (!esp_now_is_peer_exist(rec->mac)) {
+            esp_now_peer_info_t peer = { .channel = 0, .encrypt = false };
+            memcpy(peer.peer_addr, rec->mac, 6);
+            esp_now_add_peer(&peer);
+            ESP_LOGI(TAG, "Added peer node %d from NVS", id);
+        }
+        subscribe_node_cmd(rec->node_id);
     }
 
     ESP_LOGI(TAG, "ESP-NOW master initialised");

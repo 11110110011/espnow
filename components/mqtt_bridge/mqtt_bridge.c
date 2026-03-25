@@ -115,6 +115,10 @@ esp_err_t mqtt_bridge_publish(const char *topic, const char *payload,
 
 esp_err_t mqtt_bridge_subscribe(const char *topic, mqtt_callback_t cb)
 {
+    /* Ignore duplicate subscriptions — same topic already registered */
+    for (int i = 0; i < s_sub_count; i++) {
+        if (strcmp(s_subs[i].topic, topic) == 0) return ESP_OK;
+    }
     if (s_sub_count >= MAX_SUBSCRIPTIONS) return ESP_ERR_NO_MEM;
     strlcpy(s_subs[s_sub_count].topic, topic, sizeof(s_subs[0].topic));
     s_subs[s_sub_count].cb = cb;

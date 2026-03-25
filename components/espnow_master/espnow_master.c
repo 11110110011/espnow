@@ -1,6 +1,7 @@
 #include "espnow_master.h"
 #include "node_table.h"
 #include "mqtt_bridge.h"
+#include "config_store.h"
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_now.h"
@@ -9,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "espnow_master";
 
@@ -28,6 +30,40 @@ typedef struct {
 /* -----------------------------------------------------------------------
  * Helpers
  * --------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------
+ * MQTT command subscription
+ * --------------------------------------------------------------------- */
+
+static void mqtt_cmd_cb(const char *topic, const char *payload, int len)
+{
+    /* topic format: {base}/node/{id}/command */
+    const char *p = strrchr(topic, '/');          /* points to "/command" */
+    if (!p) return;
+    /* step back to find node id: scan left from the slash before "command" */
+    const char *end = p;                          /* '/' before "command" */
+    while (end > topic && *(end-1) != '/') end--;  /* end now points at id */
+    uint8_t node_id = (uint8_t)atoi(end);
+    if (node_id == 0) return;
+
+    uint8_t action;
+    if      (len >= 2 && strncmp(payload, "ON",     2) == 0) action = ESPNOW_ACTION_ON;
+    else if (len >= 3 && strncmp(payload, "OFF",    3) == 0) action = ESPNOW_ACTION_OFF;
+    else if (len >= 6 && strncmp(payload, "TOGGLE", 6) == 0) action = ESPNOW_ACTION_TOGGLE;
+    else { ESP_LOGW(TAG, "Unknown cmd payload: %.*s", len, payload); return; }
+
+    ESP_LOGI(TAG, "MQTT CMD node %d action %d", node_id, action);
+    espnow_master_send_cmd(node_id, action);
+}
+
+static void subscribe_node_cmd(uint8_t node_id)
+{
+    mqtt_config_t mcfg;
+    config_store_get_mqtt(&mcfg);
+    char topic[80];
+    snprintf(topic, sizeof(topic), "%s/node/%u/command", mcfg.topic, node_id);
+    mqtt_bridge_subscribe(topic, mqtt_cmd_cb);
+}
 
 static void send_msg(const uint8_t *mac, espnow_msg_t *msg)
 {
@@ -87,6 +123,7 @@ static void espnow_recv_task(void *arg)
 
             /* Publish availability */
             mqtt_bridge_publish_node_avail(node_id, true);
+            subscribe_node_cmd(node_id);
             break;
         }
 
@@ -153,6 +190,13 @@ esp_err_t espnow_master_init(void)
         esp_timer_create(&timer_args, &s_keepalive_timer), TAG, "timer");
     ESP_RETURN_ON_ERROR(
         esp_timer_start_periodic(s_keepalive_timer, KEEPALIVE_INTERVAL_US), TAG, "timer start");
+
+    /* Subscribe to command topics for nodes already in NVS */
+    int count = node_table_count();
+    for (uint8_t id = 1; id <= (uint8_t)count; id++) {
+        node_record_t *rec = node_table_find_by_id(id);
+        if (rec) subscribe_node_cmd(rec->node_id);
+    }
 
     ESP_LOGI(TAG, "ESP-NOW master initialised");
     return ESP_OK;

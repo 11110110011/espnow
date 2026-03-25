@@ -132,6 +132,13 @@ static void espnow_recv_task(void *arg)
         case ESPNOW_MSG_STATE_REPORT: {
             uint8_t relay_state = msg->payload[0];
             ESP_LOGI(TAG, "STATE from node %d: %s", msg->node_id, relay_state ? "ON" : "OFF");
+            node_record_t *srec = node_table_find_by_id(msg->node_id);
+            if (srec && !srec->online) {
+                /* Node sent state while we thought it was offline (gateway reboot).
+                 * Mark it online and publish availability so MQTT stays correct. */
+                node_table_set_online(msg->node_id, true);
+                mqtt_bridge_publish_node_avail(msg->node_id, true);
+            }
             node_table_update_state(msg->node_id, (bool)relay_state);
             mqtt_bridge_publish_node_state(msg->node_id, (bool)relay_state);
             if (msg->node_id <= CONFIG_STORE_MAX_NODES)

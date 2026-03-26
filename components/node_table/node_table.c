@@ -66,6 +66,31 @@ esp_err_t node_table_register(const uint8_t *mac, uint8_t node_id, uint8_t caps)
     return config_store_save_nodes(entries, s_count);
 }
 
+esp_err_t node_table_delete(uint8_t node_id)
+{
+    int idx = -1;
+    for (int i = 0; i < s_count; i++) {
+        if (s_nodes[i].node_id == node_id) { idx = i; break; }
+    }
+    if (idx < 0) return ESP_ERR_NOT_FOUND;
+
+    /* Shift remaining entries down */
+    for (int i = idx; i < s_count - 1; i++)
+        s_nodes[i] = s_nodes[i + 1];
+    memset(&s_nodes[s_count - 1], 0, sizeof(node_record_t));
+    s_count--;
+
+    /* Persist updated list */
+    node_entry_t entries[CONFIG_STORE_MAX_NODES];
+    for (int i = 0; i < s_count; i++) {
+        memcpy(entries[i].mac, s_nodes[i].mac, 6);
+        entries[i].node_id = s_nodes[i].node_id;
+    }
+    esp_err_t err = config_store_save_nodes(entries, s_count);
+    ESP_LOGI(TAG, "Node %d deleted (total: %d)", node_id, s_count);
+    return err;
+}
+
 node_record_t *node_table_find_by_id(uint8_t node_id)
 {
     for (int i = 0; i < s_count; i++) {

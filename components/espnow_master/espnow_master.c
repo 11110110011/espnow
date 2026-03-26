@@ -269,3 +269,23 @@ esp_err_t espnow_master_ping_all(void)
     }
     return ESP_OK;
 }
+
+esp_err_t espnow_master_delete_node(uint8_t node_id)
+{
+    node_record_t *rec = node_table_find_by_id(node_id);
+    if (!rec) return ESP_ERR_NOT_FOUND;
+
+    /* Remove ESP-NOW peer so we stop sending to this MAC */
+    if (esp_now_is_peer_exist(rec->mac)) {
+        esp_now_del_peer(rec->mac);
+    }
+
+    /* Clear missed-ping counter */
+    if (node_id <= CONFIG_STORE_MAX_NODES) s_missed_pings[node_id] = 0;
+
+    /* Publish offline + clear retained state */
+    mqtt_bridge_publish_node_avail(node_id, false);
+
+    /* Remove from table and NVS */
+    return node_table_delete(node_id);
+}

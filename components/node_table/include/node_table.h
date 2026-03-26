@@ -20,6 +20,7 @@ typedef struct {
 
 esp_err_t      node_table_init(void);
 esp_err_t      node_table_register(const uint8_t *mac, uint8_t node_id, uint8_t caps);
+esp_err_t      node_table_delete(uint8_t node_id);
 node_record_t *node_table_find_by_id(uint8_t node_id);
 node_record_t *node_table_find_by_mac(const uint8_t *mac);
 esp_err_t      node_table_update_state(uint8_t node_id, bool relay_state);

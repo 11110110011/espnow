@@ -1,6 +1,7 @@
 #include "web_cfg.h"
 #include "config_store.h"
 #include "node_table.h"
+#include "espnow_master.h"
 #include "local_io.h"
 #include "esp_log.h"
 #include "esp_check.h"
@@ -91,19 +92,25 @@ static esp_err_t handle_root(httpd_req_t *req)
         httpd_resp_sendstr_chunk(req, "<p>No nodes registered.</p>");
     } else {
         httpd_resp_sendstr_chunk(req,
-            "<table><tr><th>ID</th><th>MAC</th><th>State</th><th>Online</th></tr>");
+            "<table><tr><th>ID</th><th>MAC</th><th>State</th><th>Online</th><th></th></tr>");
         for (uint8_t id = 1; id <= CONFIG_STORE_MAX_NODES; id++) {
             node_record_t *r = node_table_find_by_id(id);
             if (!r) continue;
             chunk_fmt(req,
                 "<tr><td>%u</td>"
                 "<td>%02x:%02x:%02x:%02x:%02x:%02x</td>"
-                "<td>%s</td><td>%s</td></tr>",
+                "<td>%s</td><td>%s</td>"
+                "<td><form method='POST' action='/node/delete' style='margin:0'>"
+                "<input type='hidden' name='id' value='%u'>"
+                "<button type='submit' "
+                "onclick=\"return confirm('Delete node %u?')\">Delete</button>"
+                "</form></td></tr>",
                 r->node_id,
                 r->mac[0], r->mac[1], r->mac[2],
                 r->mac[3], r->mac[4], r->mac[5],
                 r->state  ? "ON"  : "OFF",
-                r->online ? "yes" : "no");
+                r->online ? "yes" : "no",
+                r->node_id, r->node_id);
         }
         httpd_resp_sendstr_chunk(req, "</table>");
     }
@@ -278,6 +285,43 @@ static esp_err_t handle_config_post(httpd_req_t *req)
 }
 
 /* -----------------------------------------------------------------------
+ * POST /node/delete
+ * --------------------------------------------------------------------- */
+
+static esp_err_t handle_node_delete(httpd_req_t *req)
+{
+    char body[32] = {0};
+    int got = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (got <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+        return ESP_FAIL;
+    }
+    body[got] = '\0';
+
+    char tmp[8];
+    get_field(body, "id", tmp, sizeof(tmp));
+    uint8_t node_id = (uint8_t)atoi(tmp);
+    if (node_id == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid id");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = espnow_master_delete_node(node_id);
+    if (err == ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "Delete: node %d not found", node_id);
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Delete node %d failed: %s", node_id, esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Node %d deleted via web UI", node_id);
+    }
+
+    httpd_resp_set_status(req, "303 See Other");
+    httpd_resp_set_hdr(req, "Location", "/");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+/* -----------------------------------------------------------------------
  * POST /restart
  * --------------------------------------------------------------------- */
 
@@ -304,9 +348,10 @@ esp_err_t web_cfg_start(void)
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start");
 
     static const httpd_uri_t routes[] = {
-        { .uri = "/",        .method = HTTP_GET,  .handler = handle_root },
-        { .uri = "/config",  .method = HTTP_POST, .handler = handle_config_post },
-        { .uri = "/restart", .method = HTTP_POST, .handler = handle_restart },
+        { .uri = "/",            .method = HTTP_GET,  .handler = handle_root },
+        { .uri = "/config",      .method = HTTP_POST, .handler = handle_config_post },
+        { .uri = "/node/delete", .method = HTTP_POST, .handler = handle_node_delete },
+        { .uri = "/restart",     .method = HTTP_POST, .handler = handle_restart },
     };
     for (int i = 0; i < (int)(sizeof(routes)/sizeof(routes[0])); i++)
         httpd_register_uri_handler(s_server, &routes[i]);

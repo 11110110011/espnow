@@ -53,6 +53,13 @@ esp_err_t espnow_master_send_cmd(uint8_t node_id, uint8_t action);
 /** @brief Send PING to all online nodes (called by keepalive timer). */
 esp_err_t espnow_master_ping_all(void);
 
+/**
+ * @brief Delete a node: remove ESP-NOW peer, publish availability=offline,
+ *        and erase from NVS. The node will re-register from scratch if it
+ *        reboots (e.g. after being reflashed with a new MAC).
+ */
+esp_err_t espnow_master_delete_node(uint8_t node_id);
+
 #ifdef __cplusplus
 }
 #endif

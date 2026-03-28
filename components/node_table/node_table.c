@@ -30,15 +30,31 @@ esp_err_t node_table_init(void)
 
 esp_err_t node_table_register(const uint8_t *mac, uint8_t node_id, uint8_t caps)
 {
+    bool changed = false;
+
     /* Update existing record if MAC already known */
     for (int i = 0; i < s_count; i++) {
         if (memcmp(s_nodes[i].mac, mac, 6) == 0) {
-            s_nodes[i].node_id      = node_id;
+            if (s_nodes[i].node_id != node_id) {
+                ESP_LOGI(TAG, "Node MAC known, node_id changed %d→%d",
+                         s_nodes[i].node_id, node_id);
+                s_nodes[i].node_id = node_id;
+                changed = true;
+            }
             s_nodes[i].capabilities = caps;
             s_nodes[i].online       = true;
             s_nodes[i].last_seen_ms = (uint32_t)(esp_timer_get_time() / 1000);
             ESP_LOGI(TAG, "Node %d re-registered", node_id);
-            return ESP_OK;
+            if (!changed) return ESP_OK;
+            goto save;
+        }
+    }
+
+    /* Reject duplicate node_id from a different MAC */
+    for (int i = 0; i < s_count; i++) {
+        if (s_nodes[i].node_id == node_id) {
+            ESP_LOGW(TAG, "Node %d already registered with different MAC — ignoring", node_id);
+            return ESP_ERR_INVALID_ARG;
         }
     }
 
@@ -54,9 +70,9 @@ esp_err_t node_table_register(const uint8_t *mac, uint8_t node_id, uint8_t caps)
     s_nodes[s_count].online       = true;
     s_nodes[s_count].last_seen_ms = (uint32_t)(esp_timer_get_time() / 1000);
     s_count++;
-
     ESP_LOGI(TAG, "New node %d registered (total: %d)", node_id, s_count);
 
+save:;
     /* Persist to NVS */
     node_entry_t entries[CONFIG_STORE_MAX_NODES];
     for (int i = 0; i < s_count; i++) {

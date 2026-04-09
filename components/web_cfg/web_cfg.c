@@ -152,25 +152,41 @@ static esp_err_t handle_root(httpd_req_t *req)
         "<table><tr>"
         "<th>Pin</th><th>Mode</th>"
         "<th>Pull-up</th><th>Invert</th>"
-        "<th>Pulse</th><th>Count</th>"
+        "<th>Pulse</th><th>Interlock</th>"
         "</tr>");
 
     for (int i = 0; i < CONFIG_STORE_GPIO_COUNT; i++) {
+        if (local_io_pin_is_reserved(i)) continue;   /* skip pin 7 (W5500 RST) */
+
         gpio_cfg_t cfg;
         config_store_get_gpio(i, &cfg);
+        bool input_only = local_io_pin_is_input_only(i);
 
-        /* pin + mode select */
-        chunk_fmt(req,
-            "<tr><td>%d</td>"
-            "<td><select name='gmode%d'>"
-            "<option value='0'%s>off</option>"
-            "<option value='1'%s>in</option>"
-            "<option value='2'%s>out</option>"
-            "</select></td>",
-            i, i,
-            cfg.mode == CFG_GPIO_MODE_DISABLED ? " selected" : "",
-            cfg.mode == CFG_GPIO_MODE_INPUT    ? " selected" : "",
-            cfg.mode == CFG_GPIO_MODE_OUTPUT   ? " selected" : "");
+        /* pin number + GPIO number label */
+        chunk_fmt(req, "<tr><td>%d</td>", i);
+
+        /* mode select — input-only pins: only off/in */
+        if (input_only) {
+            chunk_fmt(req,
+                "<td><select name='gmode%d'>"
+                "<option value='0'%s>off</option>"
+                "<option value='1'%s>in</option>"
+                "</select></td>",
+                i,
+                cfg.mode == CFG_GPIO_MODE_DISABLED ? " selected" : "",
+                cfg.mode == CFG_GPIO_MODE_INPUT    ? " selected" : "");
+        } else {
+            chunk_fmt(req,
+                "<td><select name='gmode%d'>"
+                "<option value='0'%s>off</option>"
+                "<option value='1'%s>in</option>"
+                "<option value='2'%s>out</option>"
+                "</select></td>",
+                i,
+                cfg.mode == CFG_GPIO_MODE_DISABLED ? " selected" : "",
+                cfg.mode == CFG_GPIO_MODE_INPUT    ? " selected" : "",
+                cfg.mode == CFG_GPIO_MODE_OUTPUT   ? " selected" : "");
+        }
 
         /* checkboxes */
         chunk_fmt(req,
@@ -181,11 +197,24 @@ static esp_err_t handle_root(httpd_req_t *req)
             i, cfg.invert     ? " checked" : "",
             i, cfg.pulse_mode ? " checked" : "");
 
-        /* pulse count */
-        chunk_fmt(req,
-            "<td><input name='gpcnt%d' type='number' min='1' max='5' value='%d'></td>"
-            "</tr>",
-            i, cfg.pulse_count ? cfg.pulse_count : 1);
+        /* interlock partner dropdown — only for output-capable pins */
+        if (!input_only) {
+            chunk_fmt(req, "<td><select name='glink%d'>", i);
+            chunk_fmt(req, "<option value='255'%s>none</option>",
+                      cfg.linked_pin == CFG_GPIO_NO_LINK ? " selected" : "");
+            for (int j = 0; j < CONFIG_STORE_GPIO_COUNT; j++) {
+                if (j == i) continue;
+                if (local_io_pin_is_reserved(j)) continue;
+                if (local_io_pin_is_input_only(j)) continue;
+                chunk_fmt(req, "<option value='%d'%s>pin%d</option>",
+                          j, cfg.linked_pin == (uint8_t)j ? " selected" : "", j);
+            }
+            httpd_resp_sendstr_chunk(req, "</select></td>");
+        } else {
+            httpd_resp_sendstr_chunk(req, "<td>—</td>");
+        }
+
+        httpd_resp_sendstr_chunk(req, "</tr>");
     }
 
     httpd_resp_sendstr_chunk(req, "</table>");
@@ -246,6 +275,8 @@ static esp_err_t handle_config_post(httpd_req_t *req)
 
     /* GPIO */
     for (int i = 0; i < CONFIG_STORE_GPIO_COUNT; i++) {
+        if (local_io_pin_is_reserved(i)) continue;   /* skip pin 7 (W5500 RST) */
+
         gpio_cfg_t cfg;
         memset(&cfg, 0, sizeof(cfg));
         char key[16];
@@ -253,6 +284,10 @@ static esp_err_t handle_config_post(httpd_req_t *req)
         snprintf(key, sizeof(key), "gmode%d", i);
         get_field(body, key, tmp, sizeof(tmp));
         cfg.mode = (uint8_t)atoi(tmp);
+
+        /* Guard: input-only pins cannot be set to output */
+        if (local_io_pin_is_input_only(i) && cfg.mode == CFG_GPIO_MODE_OUTPUT)
+            cfg.mode = CFG_GPIO_MODE_DISABLED;
 
         snprintf(key, sizeof(key), "gpull%d", i);
         get_field(body, key, tmp, sizeof(tmp));
@@ -266,11 +301,9 @@ static esp_err_t handle_config_post(httpd_req_t *req)
         get_field(body, key, tmp, sizeof(tmp));
         cfg.pulse_mode = (tmp[0] == '1');
 
-        snprintf(key, sizeof(key), "gpcnt%d", i);
+        snprintf(key, sizeof(key), "glink%d", i);
         get_field(body, key, tmp, sizeof(tmp));
-        cfg.pulse_count = tmp[0] ? (uint8_t)atoi(tmp) : 1;
-        if (cfg.pulse_count < 1) cfg.pulse_count = 1;
-        if (cfg.pulse_count > 5) cfg.pulse_count = 5;
+        cfg.linked_pin = tmp[0] ? (uint8_t)atoi(tmp) : CFG_GPIO_NO_LINK;
 
         local_io_reconfigure(i, &cfg);
     }

@@ -11,6 +11,7 @@ idf_component_register(
         ha_discovery
         web_cfg
         sys_status
+        bme280_sensor
         nvs_flash
         esp_event
 )

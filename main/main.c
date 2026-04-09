@@ -7,6 +7,7 @@
 #include "ha_discovery.h"
 #include "web_cfg.h"
 #include "sys_status.h"
+#include "bme280_sensor.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 
@@ -42,6 +43,12 @@ void app_main(void)
 
     /* 9. Periodic system status */
     ESP_ERROR_CHECK(sys_status_init());
+
+    /* 10. BME280 temperature + humidity sensor (optional — logs warning if not wired) */
+    esp_err_t bme_err = bme280_sensor_init();
+    if (bme_err != ESP_OK) {
+        ESP_LOGW(TAG, "BME280 init failed (%s) — sensor disabled", esp_err_to_name(bme_err));
+    }
 
     ESP_LOGI(TAG, "Gateway ready");
 }

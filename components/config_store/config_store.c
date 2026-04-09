@@ -143,16 +143,19 @@ esp_err_t config_store_get_gpio(int pin, gpio_cfg_t *out)
         memset(out, 0, sizeof(*out));
         out->mode        = CFG_GPIO_MODE_DISABLED;
         out->pulse_count = 1;
+        out->linked_pin  = CFG_GPIO_NO_LINK;
         return ESP_OK;
     }
     if (ret != ESP_OK) return ret;
 
+    out->linked_pin = CFG_GPIO_NO_LINK;   /* default if key absent */
     uint8_t v;
     nvs_get_u8(h, "mode",    &out->mode);
     if (nvs_get_u8(h, "pull",    &v) == ESP_OK) out->pull_up    = (bool)v;
     if (nvs_get_u8(h, "invert",  &v) == ESP_OK) out->invert     = (bool)v;
     if (nvs_get_u8(h, "pulse",   &v) == ESP_OK) out->pulse_mode = (bool)v;
     if (nvs_get_u8(h, "pcnt",    &v) == ESP_OK) out->pulse_count = v;
+    if (nvs_get_u8(h, "link",    &v) == ESP_OK) out->linked_pin  = v;
 
     nvs_close(h);
     return ESP_OK;
@@ -170,6 +173,7 @@ esp_err_t config_store_set_gpio(int pin, const gpio_cfg_t *cfg)
     nvs_set_u8(h, "invert", (uint8_t)cfg->invert);
     nvs_set_u8(h, "pulse",  (uint8_t)cfg->pulse_mode);
     nvs_set_u8(h, "pcnt",   cfg->pulse_count);
+    nvs_set_u8(h, "link",   cfg->linked_pin);
     esp_err_t ret = nvs_commit(h);
     nvs_close(h);
     return ret;

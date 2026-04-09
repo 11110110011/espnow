@@ -37,13 +37,15 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Connected to broker");
         s_connected = true;
+        /* Fire connect callbacks first so any retained-clear publishes are
+           enqueued before the SUBSCRIBE packets — TCP ordering guarantees
+           the broker processes the clears before delivering retained msgs. */
+        for (int i = 0; i < s_connect_cb_cnt; i++) {
+            s_connect_cbs[i]();
+        }
         /* Re-subscribe to all topics */
         for (int i = 0; i < s_sub_count; i++) {
             esp_mqtt_client_subscribe(s_client, s_subs[i].topic, 1);
-        }
-        /* Fire connect callbacks (e.g. HA discovery re-publish) */
-        for (int i = 0; i < s_connect_cb_cnt; i++) {
-            s_connect_cbs[i]();
         }
         break;
 

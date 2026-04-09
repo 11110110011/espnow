@@ -32,12 +32,15 @@ typedef struct {
 #define CFG_GPIO_MODE_INPUT     1
 #define CFG_GPIO_MODE_OUTPUT    2
 
+#define CFG_GPIO_NO_LINK  0xFF   /* linked_pin value meaning "no interlock" */
+
 typedef struct {
     uint8_t mode;           /* CFG_GPIO_MODE_* */
     bool    pull_up;
     bool    invert;
     bool    pulse_mode;
     uint8_t pulse_count;    /* 1–5 */
+    uint8_t linked_pin;     /* interlocked partner slot, or CFG_GPIO_NO_LINK */
 } gpio_cfg_t;
 
 typedef struct {

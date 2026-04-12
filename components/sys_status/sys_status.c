@@ -52,6 +52,7 @@ static void status_task(void *arg)
 
         mqtt_bridge_publish(topic, payload, 0, false);
         ESP_LOGD(TAG, "Status: %s", payload);
+        heap_caps_check_integrity_all(true);  /* panic immediately on heap corruption */
     }
 }
 

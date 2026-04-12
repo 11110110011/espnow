@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -16,6 +17,20 @@ static void clear_retained_cmds(void);
 #define DEBOUNCE_MS       50
 #define PULSE_PERIOD_MS   120
 #define POLL_INTERVAL_MS  20
+
+/* -----------------------------------------------------------------------
+ * Output command queue — keeps vTaskDelay out of the MQTT event callback
+ * --------------------------------------------------------------------- */
+
+typedef enum { CMD_SET, CMD_PULSE } cmd_type_t;
+typedef struct {
+    cmd_type_t type;
+    int        pin;
+    bool       state;   /* CMD_SET */
+    int        count;   /* CMD_PULSE */
+} output_cmd_t;
+
+static QueueHandle_t s_cmd_queue;
 
 /* Map logical pin indices 0–7 to actual GPIO numbers.
    Adjust these for the target hardware. */
@@ -45,6 +60,24 @@ static void input_poll_task(void *arg)
                 ESP_LOGD(TAG, "GPIO %d (pin %d) -> %s", i, s_gpio_map[i], level ? "ON" : "OFF");
             }
         }
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * Output command dispatcher task
+ * Runs blocking operations (vTaskDelay for pulse/interlock) outside of
+ * the MQTT event callback context.
+ * --------------------------------------------------------------------- */
+
+static void output_cmd_task(void *arg)
+{
+    output_cmd_t cmd;
+    for (;;) {
+        if (xQueueReceive(s_cmd_queue, &cmd, portMAX_DELAY) != pdTRUE) continue;
+        if (cmd.type == CMD_SET)
+            local_io_set_output(cmd.pin, cmd.state);
+        else
+            local_io_trigger_pulse(cmd.pin, cmd.count);
     }
 }
 
@@ -99,19 +132,18 @@ static void mqtt_cmd_cb(const char *topic, const char *payload, int len)
     while (q > topic && *q != '/') q--;
     int pin = atoi(q + 1);
 
-    esp_err_t err;
+    output_cmd_t cmd = { .type = CMD_SET, .pin = pin };
     if (strncmp(payload, "ON", 2) == 0) {
-        err = local_io_set_output(pin, true);
+        cmd.state = true;
     } else if (strncmp(payload, "OFF", 3) == 0) {
-        err = local_io_set_output(pin, false);
+        cmd.state = false;
     } else if (strncmp(payload, "TOGGLE", 6) == 0) {
-        err = local_io_set_output(pin, !s_output_state[pin]);
+        cmd.state = !s_output_state[pin];
     } else {
         ESP_LOGW(TAG, "gpio cmd pin %d: unknown payload '%s'", pin, payload);
         return;
     }
-    if (err != ESP_OK)
-        ESP_LOGW(TAG, "gpio cmd pin %d failed: %s", pin, esp_err_to_name(err));
+    xQueueSend(s_cmd_queue, &cmd, 0);
 }
 
 /* -----------------------------------------------------------------------
@@ -121,7 +153,6 @@ static void mqtt_cmd_cb(const char *topic, const char *payload, int len)
 static void mqtt_pulse_cb(const char *topic, const char *payload, int len)
 {
     (void)topic; (void)len;
-    ESP_LOGI(TAG, "pulse cmd received: '%s'", payload);
     int pin = -1, pulses = 1;
     const char *p;
     if ((p = strstr(payload, "\"pin\":")))    pin    = atoi(p + 6);
@@ -130,9 +161,8 @@ static void mqtt_pulse_cb(const char *topic, const char *payload, int len)
         ESP_LOGW(TAG, "pulse cmd: missing pin");
         return;
     }
-    esp_err_t err = local_io_trigger_pulse(pin, pulses);
-    if (err != ESP_OK)
-        ESP_LOGW(TAG, "pulse cmd pin %d failed: %s", pin, esp_err_to_name(err));
+    output_cmd_t cmd = { .type = CMD_PULSE, .pin = pin, .count = pulses };
+    xQueueSend(s_cmd_queue, &cmd, 0);
 }
 
 /* -----------------------------------------------------------------------
@@ -145,7 +175,9 @@ esp_err_t local_io_init(void)
         config_store_get_gpio(i, &s_cfg[i]);
         configure_pin(i);
     }
-    xTaskCreate(input_poll_task, "local_io_poll", 2048, NULL, 4, NULL);
+    s_cmd_queue = xQueueCreate(8, sizeof(output_cmd_t));
+    xTaskCreate(input_poll_task,  "local_io_poll", 2048, NULL, 4, NULL);
+    xTaskCreate(output_cmd_task,  "local_io_cmd",  2048, NULL, 4, NULL);
 
     mqtt_config_t mcfg;
     config_store_get_mqtt(&mcfg);

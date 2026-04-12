@@ -169,6 +169,37 @@ static uint32_t compensate_humidity(int32_t adc_H, int32_t t_fine)
 }
 
 /* -----------------------------------------------------------------------
+ * Sensor configuration (called on init and after reset)
+ * --------------------------------------------------------------------- */
+
+static esp_err_t sensor_configure(void)
+{
+    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_RESET, 0xB6), TAG, "reset");
+    vTaskDelay(pdMS_TO_TICKS(10));
+    ESP_RETURN_ON_ERROR(read_calibration(), TAG, "calibration");
+    if (s_has_humidity)
+        ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_HUM, 0x01), TAG, "ctrl_hum");
+    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_MEAS, 0x27), TAG, "ctrl_meas");
+    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CONFIG,    0xA0), TAG, "config");
+    return ESP_OK;
+}
+
+/* -----------------------------------------------------------------------
+ * MQTT reset command  topic: {base}/sensor/bme280/reset  payload: any
+ * --------------------------------------------------------------------- */
+
+static void mqtt_reset_cb(const char *topic, const char *payload, int len)
+{
+    (void)topic; (void)payload; (void)len;
+    ESP_LOGI(TAG, "Reset requested via MQTT");
+    esp_err_t err = sensor_configure();
+    if (err == ESP_OK)
+        ESP_LOGI(TAG, "Sensor reset OK");
+    else
+        ESP_LOGW(TAG, "Sensor reset failed: %s", esp_err_to_name(err));
+}
+
+/* -----------------------------------------------------------------------
  * Publish task
  * --------------------------------------------------------------------- */
 
@@ -281,24 +312,19 @@ esp_err_t bme280_sensor_init(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* Soft reset */
-    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_RESET, 0xB6), TAG, "reset");
-    vTaskDelay(pdMS_TO_TICKS(10));
+    /* Reset + configure */
+    ESP_RETURN_ON_ERROR(sensor_configure(), TAG, "sensor configure");
 
-    /* Read calibration */
-    ESP_RETURN_ON_ERROR(read_calibration(), TAG, "calibration");
-
-    /* Configure sensor */
-    if (s_has_humidity)
-        ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_HUM, 0x01), TAG, "ctrl_hum");
-    /* temp×1, press×1, normal mode */
-    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_MEAS, 0x27), TAG, "ctrl_meas");
-    /* standby 1000 ms, filter off */
-    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CONFIG,    0xA0), TAG, "config");
+    /* Subscribe to MQTT reset command */
+    mqtt_config_t mcfg;
+    config_store_get_mqtt(&mcfg);
+    char reset_topic[80];
+    snprintf(reset_topic, sizeof(reset_topic), "%s/sensor/bme280/reset", mcfg.topic);
+    mqtt_bridge_subscribe(reset_topic, mqtt_reset_cb);
 
     xTaskCreate(sensor_task, "bme280", 3072, NULL, 3, NULL);
-    ESP_LOGI(TAG, "%s initialised (addr=0x%02X, SDA=%d, SCL=%d, humidity=%s)",
+    ESP_LOGI(TAG, "%s initialised (addr=0x%02X, SDA=%d, SCL=%d, humidity=%s, reset topic=%s)",
              chip_name, s_addr, I2C_SDA_GPIO, I2C_SCL_GPIO,
-             s_has_humidity ? "yes" : "no");
+             s_has_humidity ? "yes" : "no", reset_topic);
     return ESP_OK;
 }

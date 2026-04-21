@@ -162,6 +162,22 @@ static void espnow_recv_task(void *arg)
 }
 
 /* -----------------------------------------------------------------------
+ * MQTT connect callback — clear stale retained availability for unverified nodes
+ * --------------------------------------------------------------------- */
+
+static void on_mqtt_connect(void)
+{
+    int count = node_table_count();
+    for (uint8_t id = 1; id <= CONFIG_STORE_MAX_NODES; id++) {
+        node_record_t *rec = node_table_find_by_id(id);
+        if (!rec) continue;
+        if (!rec->online) {
+            mqtt_bridge_publish_node_avail(id, false);
+        }
+    }
+}
+
+/* -----------------------------------------------------------------------
  * Keepalive timer
  * --------------------------------------------------------------------- */
 
@@ -170,17 +186,20 @@ static void keepalive_cb(void *arg)
     int count = node_table_count();
     for (uint8_t id = 1; id <= (uint8_t)count; id++) {
         node_record_t *rec = node_table_find_by_id(id);
-        if (!rec || !rec->online) continue;
+        if (!rec) continue;
 
-        /* Check if previous PING went unanswered */
-        if (id <= CONFIG_STORE_MAX_NODES && s_missed_pings[id] >= MAX_MISSED_PONGS) {
-            ESP_LOGW(TAG, "Node %d offline — %d missed PINGs", id, s_missed_pings[id]);
-            node_table_set_online(id, false);
-            mqtt_bridge_publish_node_avail(id, false);
-            s_missed_pings[id] = 0;
-            continue;
+        if (rec->online) {
+            /* Check if previous PING went unanswered */
+            if (id <= CONFIG_STORE_MAX_NODES && s_missed_pings[id] >= MAX_MISSED_PONGS) {
+                ESP_LOGW(TAG, "Node %d offline — %d missed PINGs", id, s_missed_pings[id]);
+                node_table_set_online(id, false);
+                mqtt_bridge_publish_node_avail(id, false);
+                s_missed_pings[id] = 0;
+                continue;
+            }
         }
 
+        /* Ping both online nodes (keepalive) and offline nodes (recovery) */
         espnow_msg_t ping = { .msg_type = ESPNOW_MSG_PING, .node_id = id };
         send_msg(rec->mac, &ping);
         if (id <= CONFIG_STORE_MAX_NODES) s_missed_pings[id]++;
@@ -234,6 +253,10 @@ esp_err_t espnow_master_init(void)
         }
         subscribe_node_cmd(rec->node_id);
     }
+
+    mqtt_bridge_register_connect_cb(on_mqtt_connect);
+    if (mqtt_bridge_is_connected())
+        on_mqtt_connect();
 
     ESP_LOGI(TAG, "ESP-NOW master initialised");
     return ESP_OK;

@@ -175,13 +175,31 @@ static uint32_t compensate_humidity(int32_t adc_H, int32_t t_fine)
 static esp_err_t sensor_configure(void)
 {
     ESP_RETURN_ON_ERROR(i2c_write_reg(REG_RESET, 0xB6), TAG, "reset");
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(100));
     ESP_RETURN_ON_ERROR(read_calibration(), TAG, "calibration");
     if (s_has_humidity)
         ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_HUM, 0x01), TAG, "ctrl_hum");
-    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_MEAS, 0x27), TAG, "ctrl_meas");
-    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CONFIG,    0xA0), TAG, "config");
+    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CONFIG, 0xA0), TAG, "config");
     return ESP_OK;
+}
+
+/* Trigger one forced measurement and poll until complete */
+static esp_err_t sensor_force_measurement(void)
+{
+    /* forced mode: osrs_t=x1, osrs_p=x1, mode=01 */
+    ESP_RETURN_ON_ERROR(i2c_write_reg(REG_CTRL_MEAS, 0x25), TAG, "force");
+
+    /* Poll status register bit3 (measuring) until clear, max 50ms */
+    for (int i = 0; i < 50; i++) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        uint8_t status = 0;
+        if (i2c_read_regs(0xF3, &status, 1) != ESP_OK) break;
+        if ((status & 0x08) == 0) return ESP_OK;  /* measurement done */
+    }
+    /* Also check ctrl_meas went back to 0x00 (sleep = measurement done) */
+    uint8_t ctrl = 0xFF;
+    i2c_read_regs(REG_CTRL_MEAS, &ctrl, 1);
+    return (ctrl == 0x00) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 /* -----------------------------------------------------------------------
@@ -216,6 +234,14 @@ static void sensor_task(void *arg)
     const size_t data_len = s_has_humidity ? 8 : 6;
 
     for (;;) {
+        /* Sensor is a clone that doesn't support normal mode — trigger forced measurement */
+        if (sensor_force_measurement() != ESP_OK) {
+            ESP_LOGE(TAG, "force measurement failed — reconfiguring");
+            sensor_configure();
+            vTaskDelay(pdMS_TO_TICKS(PUBLISH_INTERVAL_MS));
+            continue;
+        }
+
         uint8_t data[8] = {0};
         if (i2c_read_regs(REG_DATA, data, data_len) != ESP_OK) {
             ESP_LOGE(TAG, "sensor read failed");
@@ -312,8 +338,15 @@ esp_err_t bme280_sensor_init(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* Reset + configure */
-    ESP_RETURN_ON_ERROR(sensor_configure(), TAG, "sensor configure");
+    /* Reset + configure — retry up to 3 times (sensor may be mid-reset after power glitch) */
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        err = sensor_configure();
+        if (err == ESP_OK) break;
+        ESP_LOGW(TAG, "sensor_configure attempt %d failed: %s", attempt, esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(50 * attempt));
+    }
+    ESP_RETURN_ON_ERROR(err, TAG, "sensor configure");
 
     /* Subscribe to MQTT reset command */
     mqtt_config_t mcfg;
